@@ -1,4 +1,6 @@
 pandas
 requests
 rapidfuzz
-pytest 
+pytest
+beautifulsoup4
+lxml 

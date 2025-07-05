@@ -2,22 +2,51 @@
 
 from typing import List, Dict
 
+from rapidfuzz import fuzz
+
+
+def _is_duplicate(name1: str, name2: str, threshold: int = 88) -> bool:
+    """Return True if two names are similar enough to be considered duplicates."""
+
+    if name1.lower() == name2.lower():
+        return True
+    return fuzz.token_sort_ratio(name1, name2) >= threshold
+
 
 def resolve_entities(entities: List[Dict]) -> List[Dict]:
-    """Resolve duplicate entities using fuzzy matching and enrich profiles.
+    """Deduplicate entities appearing across multiple sources.
 
-    Parameters
-    ----------
-    entities : List[Dict]
-        List of raw entity dictionaries from multiple sources.
-
-    Returns
-    -------
-    List[Dict]
-        Resolved and enriched entities.
+    The function merges profiles that share the same (or very similar) names.
+    Handles typos via fuzzy-matching and aggregates handles per source.
     """
-    # TODO: Implement fuzzy matching (e.g., with rapidfuzz or similar)
-    return entities
+    resolved: List[Dict] = []
+
+    for ent in entities:
+        match = None
+        for existing in resolved:
+            if _is_duplicate(ent["name"], existing["name"]):
+                match = existing
+                break
+
+        if match is None:
+            # Copy to avoid mutating original list
+            new_ent = ent.copy()
+            if ent.get("source") and ent.get("handle"):
+                new_ent["handles"] = {ent["source"]: ent["handle"]}
+            else:
+                new_ent["handles"] = {}
+            resolved.append(new_ent)
+        else:
+            # Merge data – prefer higher rating if conflict
+            if ent["rating"] > match.get("rating", 0):
+                match["rating"] = ent["rating"]
+                match["source"] = ent["source"]
+            # Update handles map
+            if ent.get("source") and ent.get("handle"):
+                handles = match.setdefault("handles", {})
+                handles[ent["source"]] = ent["handle"]
+
+    return resolved
 
 
 __all__ = ["resolve_entities"] 

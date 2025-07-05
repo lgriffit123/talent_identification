@@ -6,4 +6,6 @@ test:
 	python3 -m pytest -q
 
 run:
-	python3 main.py 
+	python3 main.py
+
+setup: install 

@@ -19,7 +19,16 @@ def write_markdown_report(entities: List[Dict], output_path: Union[str, Path] = 
     for rank, entity in enumerate(entities, start=1):
         name = entity.get("name", "Unknown")
         score = entity.get("score", "N/A")
-        lines.append(f"## {rank}. {name} — {score}")
+        reason = entity.get("reason", "")
+        # main handle: prefer Codeforces then AtCoder
+        handles = entity.get("handles", {entity.get("source", ""): entity.get("handle", "")})
+        handle_display = handles.get("codeforces") or handles.get("atcoder") or next(iter(handles.values()), "")
+
+        line = f"## {rank}. {name} ({handle_display}) — {score}"
+        if reason:
+            line += f"\n> {reason}"
+
+        lines.append(line)
 
     Path(output_path).write_text("\n".join(lines))
 
