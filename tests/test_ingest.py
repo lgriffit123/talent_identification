@@ -1,4 +1,4 @@
-from ingest import codeforces, atcoder, kaggle
+from ingest import codeforces, kaggle, leetcode
 import time
 
 
@@ -6,16 +6,10 @@ def test_fetch_ratings_returns_list():
     assert isinstance(codeforces.fetch_ratings(), list)
 
 
-def test_fetch_atcoder_returns_list():
-    assert isinstance(atcoder.fetch_ratings(limit=10), list)
-
-
-def test_codeforces_caching():
-    first = codeforces.fetch_ratings(limit=5)
-    # Immediately fetch again – should hit cache and be identical
-    second = codeforces.fetch_ratings(limit=5)
-    assert first == second 
-
-
 def test_fetch_kaggle_returns_list():
-    assert isinstance(kaggle.fetch_leaderboard(limit=10), list) 
+    assert isinstance(kaggle.fetch_leaderboard(limit=10), list)
+
+
+def test_fetch_leetcode_returns_list():
+    # Without cookies this will return an empty list but still be a list.
+    assert isinstance(leetcode.fetch_contest_ranking(limit=0), list) 

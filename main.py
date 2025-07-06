@@ -6,11 +6,16 @@ report.
 """
 
 import os, logging, math, json
-from ingest import codeforces, kaggle, atcoder, cache
+from ingest import codeforces, kaggle, leetcode, cache
 from etl import entity_resolution, scoring, report
 from collections import defaultdict
+from etl.utils import erfinv
+from dotenv import load_dotenv
 
+# Load environment variables from .env if present (safe-no-op if file missing)
+load_dotenv()
 
+# want to highlight not just the top scores, but maybe top score in a certain area, or highest relative position to peers. 
 # ---------------------------------------------------------------------------
 # Logging setup (controlled by TI_LOGLEVEL, default INFO)
 # ---------------------------------------------------------------------------
@@ -29,15 +34,15 @@ def orchestrate() -> None:
     logger.info("Starting ingestion phase")
 
     cf_raw = codeforces.fetch_ratings()
-    ac_raw = atcoder.fetch_ratings()
+    lc_raw = leetcode.fetch_contest_ranking(None)
     kg_raw = kaggle.fetch_leaderboard()
 
     logger.info(
-        "Fetched counts — Codeforces: %d, AtCoder: %d, Kaggle: %d",
-        len(cf_raw), len(ac_raw), len(kg_raw),
+        "Fetched counts — Codeforces: %d, LeetCode: %d, Kaggle: %d",
+        len(cf_raw), len(lc_raw), len(kg_raw),
     )
 
-    combined_raw = cf_raw + ac_raw + kg_raw
+    combined_raw = cf_raw + lc_raw + kg_raw
 
     # Compute percentile-normalised score within each source (fair comparison)
     ratings_by_src: dict[str, list[float]] = defaultdict(list)
@@ -56,11 +61,25 @@ def orchestrate() -> None:
 
     total_in_src = {src: len(vals) for src, vals in ratings_by_src.items()}
 
+    # Per-source mean & std for later momentum/z-score calc
+    source_stats: dict[str, dict[str, float]] = {}
+    for src, values in ratings_by_src.items():
+        if values:
+            mean = sum(values) / len(values)
+            var = sum((v - mean) ** 2 for v in values) / len(values)
+            source_stats[src] = {"mean": mean, "std": math.sqrt(var) or 1.0}
+
     for ent in combined_raw:
         src = ent["source"]
         ent["norm"] = percentile_map[src].get(ent.get("rating", 0.0), 0.0)
         ent["src_weight"] = 1.0  # uniform weight now
         ent["total_in_src"] = total_in_src.get(src, 0)
+
+        # Standardise across platforms: convert percentile → standard-normal z
+        p = ent["norm"]
+        # Clamp to avoid infinities at 0 or 1
+        p = min(max(p, 1e-12), 1 - 1e-12)
+        ent["unified_z"] = math.sqrt(2) * erfinv(2 * p - 1)
 
     # Load yesterday ratings for momentum
     prev_ratings: dict[str, dict[str, float]] = defaultdict(dict)
@@ -89,14 +108,6 @@ def orchestrate() -> None:
     entities = entity_resolution.resolve_entities(combined_raw)
 
     # Compute per-source mean and std for z-score
-    source_stats: dict[str, dict[str, float]] = {}
-    for src, group in ((s, [e for e in combined_raw if e["source"] == s and e.get("rating")]) for s in set(e["source"] for e in combined_raw)):
-        ratings = [e["rating"] for e in group if e.get("rating")]
-        if ratings:
-            mean = sum(ratings) / len(ratings)
-            var = sum((r - mean) ** 2 for r in ratings) / len(ratings)
-            source_stats[src] = {"mean": mean, "std": math.sqrt(var) or 1.0}
-
     for ent in combined_raw:
         src = ent["source"]
         stats = source_stats.get(src)

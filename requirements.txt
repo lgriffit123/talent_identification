@@ -4,4 +4,7 @@ rapidfuzz
 pytest
 beautifulsoup4
 lxml
-kaggle>=1.6.22 
+kaggle>=1.6.22
+python-dotenv>=1.0
+playwright>=1.44
+cloudscraper>=1.2.71

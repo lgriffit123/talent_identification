@@ -5,3 +5,4 @@ ingest/catalog.json
 *.zip 
 *.md
 *.json
+*.env
