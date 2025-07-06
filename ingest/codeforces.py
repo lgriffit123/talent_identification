@@ -4,6 +4,11 @@ Module for pulling Codeforces ratings and normalising them.
 
 from typing import List, Dict
 import requests
+import logging
+
+from . import cache
+
+logger = logging.getLogger(__name__)
 
 # Base URL for Codeforces API
 CODEFORCES_API_URL = "https://codeforces.com/api"
@@ -24,10 +29,19 @@ def fetch_ratings(limit: int = 1000) -> List[Dict]:
     List[Dict]
         Normalised ratings dicts with keys: name, handle, country, rating, rank, source.
     """
+    logger.info("Fetching Codeforces ratings (limit=%d)…", limit)
+    # Check cache first
+    cached = cache.get_cached("codeforces")
+    if cached is not None:
+        logger.debug("Using cached Codeforces data (%d entries)", len(cached))
+        return cached[:limit]
+
     endpoint = f"{CODEFORCES_API_URL}/user.ratedList?activeOnly=true&includeRetired=false"
 
     try:
+        logger.debug("Requesting %s", endpoint)
         resp = requests.get(endpoint, timeout=15)
+        logger.debug("Codeforces response status %s", resp.status_code)
         resp.raise_for_status()
         data = resp.json()
         if data.get("status") != "OK":
@@ -54,9 +68,13 @@ def fetch_ratings(limit: int = 1000) -> List[Dict]:
                 }
             )
 
-        return normalised
+        # Cache full list for today
+        cache.set_cached("codeforces", normalised)
+        logger.info("Fetched %d Codeforces users", len(normalised))
+        return normalised[:limit]
     except Exception:  # noqa: BLE001
         # Network failure or API error – return empty list to keep pipeline idempotent.
+        logger.exception("Codeforces fetch failed")
         return []
 
 def normalise_ratings(raw_ratings: List[Dict]) -> List[Dict]:

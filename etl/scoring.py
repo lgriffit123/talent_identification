@@ -12,17 +12,27 @@ def interestingness_score(profile: Dict) -> Tuple[float, str]:
     - The reason string explains the contributors.
     """
 
-    rating = profile.get("rating", 0)
-    base_score: float = float(rating)
+    if "norm" in profile:
+        base_score = profile["norm"] * 1000  # scale to 0-1000
+    else:
+        rating = profile.get("rating", 0)
+        base_score = float(rating)
 
-    multi_source_bonus = 0.1 * base_score if len(profile.get("handles", {})) > 1 else 0.0
+    multi_source_bonus = 50 if len(profile.get("handles", {})) > 1 else 0.0
 
     score = base_score + multi_source_bonus
 
     source = profile.get("source", "unknown")
-    reason = f"Rating {rating} on {source}"
+    reason_components = []
+    if "rating" in profile and profile["rating"]:
+        reason_components.append(f"rating {profile['rating']}")
+    if "rank" in profile:
+        reason_components.append(f"rank {profile['rank']}")
+    reason_components.append(f"on {source}")
     if multi_source_bonus:
-        reason += ", active on multiple platforms"
+        reason_components.append("active on multiple platforms")
+
+    reason = ", ".join(reason_components)
 
     return score, reason
 

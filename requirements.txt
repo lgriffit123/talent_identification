@@ -3,4 +3,5 @@ requests
 rapidfuzz
 pytest
 beautifulsoup4
-lxml 
+lxml
+kaggle>=1.6.22 
