@@ -126,7 +126,17 @@ def _download_meta_dataset() -> bool:
 def _compute_skill(limit: int) -> List[Dict]:
     root = DATA_DIR
     try:
-        users_df = pd.read_csv(root / "Users.csv", usecols=["Id", "UserName", "CreationDate"], parse_dates=["CreationDate"])
+        # Attempt to read CreationDate; fallback if column absent
+        try:
+            users_df = pd.read_csv(
+                root / "Users.csv",
+                usecols=["Id", "UserName", "CreationDate"],
+                parse_dates=["CreationDate"],
+            )
+        except ValueError:
+            # Older Meta-Kaggle versions lack CreationDate
+            users_df = pd.read_csv(root / "Users.csv", usecols=["Id", "UserName"])
+            users_df["CreationDate"] = pd.NaT
         # CompetitionResults.csv may not be available; handle gracefully
         comp_path = root / "CompetitionResults.csv"
         if comp_path.exists():
@@ -225,7 +235,7 @@ def _compute_skill(limit: int) -> List[Dict]:
     return users
 
 
-def fetch_leaderboard(limit: int = 1000) -> List[Dict]:
+def fetch_leaderboard(limit: int = 300) -> List[Dict]:
     """Fetch Kaggle user rankings via Meta-Kaggle.
 
     Parameters

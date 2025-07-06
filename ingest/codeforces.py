@@ -34,7 +34,7 @@ def _get_reg_date(handle: str) -> Optional[str]:
 # Fetch top rated Codeforces users (active only) – limited for performance
 # Docs: https://codeforces.com/apiHelp/methods#user.ratedList
 
-def fetch_ratings(limit: int = 1000) -> List[Dict]:
+def fetch_ratings(limit: int = 300) -> List[Dict]:
     """Fetch ratings for the highest-rated Codeforces users.
 
     Parameters
@@ -114,5 +114,12 @@ def normalise_ratings(raw_ratings: List[Dict]) -> List[Dict]:
     """
     # TODO: Implement normalisation logic
     return raw_ratings
+
+# Optional progress bar
+try:
+    from tqdm import tqdm  # type: ignore
+except ImportError:  # pragma: no cover – tqdm not installed
+    def tqdm(iterable, **kwargs):  # type: ignore
+        return iterable
 
 __all__ = ["fetch_ratings", "normalise_ratings"] 

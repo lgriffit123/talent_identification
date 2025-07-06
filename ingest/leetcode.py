@@ -36,6 +36,7 @@ import time
 from playwright.sync_api import sync_playwright
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import tqdm
 
 from . import cache
 
@@ -210,7 +211,7 @@ except ImportError:  # Playwright not installed
 # Public API
 # ----------------------------------------------------------------------------
 
-def fetch_contest_ranking(slug: Optional[str] = None, limit: int = 1000) -> List[Dict]:
+def fetch_contest_ranking(slug: Optional[str] = None, limit: int = 300) -> List[Dict]:
     """Return *limit* ranked users for the specified LeetCode contest *slug*.
 
     Parameters
@@ -276,12 +277,14 @@ def fetch_contest_ranking(slug: Optional[str] = None, limit: int = 1000) -> List
 
     # Use a bounded thread-pool to avoid urllib3 "connection pool is full" warnings
     with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as pool:
-        futures = {pool.submit(_fetch_page, slug, page, results, lock): page for page in remaining_pages}
+        with tqdm(total=len(remaining_pages), desc="LeetCode pages", unit="page") as pbar:
+            futures = {pool.submit(_fetch_page, slug, page, results, lock): page for page in remaining_pages}
 
-        # Early-exit once we have enough results – additional futures will complete
-        for fut in as_completed(futures):
-            if len(results) >= limit:
-                break
+            # Early-exit once we have enough results – additional futures will complete
+            for fut in as_completed(futures):
+                pbar.update(1)
+                if len(results) >= limit:
+                    break
 
     # Sort by rank (threads may have appended out-of-order)
     results.sort(key=lambda x: x["rank"])
