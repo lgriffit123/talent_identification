@@ -2,9 +2,11 @@
 Module for pulling Codeforces ratings and normalising them.
 """
 
-from typing import List, Dict
+from typing import List, Dict, Optional
 import requests
 import logging
+from datetime import datetime
+from functools import lru_cache
 
 from . import cache
 
@@ -12,6 +14,22 @@ logger = logging.getLogger(__name__)
 
 # Base URL for Codeforces API
 CODEFORCES_API_URL = "https://codeforces.com/api"
+
+# Cached registration date lookup
+
+@lru_cache(maxsize=None)
+def _get_reg_date(handle: str) -> Optional[str]:
+    """Return Codeforces registration date (ISO) for *handle*."""
+    try:
+        resp = requests.get(f"{CODEFORCES_API_URL}/user.info?handles={handle}", timeout=10)
+        if resp.status_code == 200 and resp.json().get("status") == "OK":
+            info = resp.json()["result"][0]
+            ts = info.get("registrationTimeSeconds")
+            if ts:
+                return datetime.utcfromtimestamp(ts).date().isoformat()
+    except Exception:
+        pass
+    return None
 
 # Fetch top rated Codeforces users (active only) – limited for performance
 # Docs: https://codeforces.com/apiHelp/methods#user.ratedList
@@ -57,6 +75,8 @@ def fetch_ratings(limit: int = 1000) -> List[Dict]:
                 name_parts.append(u["lastName"].strip())
             name = " ".join(name_parts) if name_parts else u["handle"]
 
+            first_seen = _get_reg_date(u["handle"])  # may be None
+
             normalised.append(
                 {
                     "name": name,
@@ -65,6 +85,7 @@ def fetch_ratings(limit: int = 1000) -> List[Dict]:
                     "rating": u.get("rating", 0),
                     "rank": u.get("rank"),
                     "source": "codeforces",
+                    "platform_first_seen": first_seen,
                 }
             )
 

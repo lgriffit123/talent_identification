@@ -126,7 +126,7 @@ def _download_meta_dataset() -> bool:
 def _compute_skill(limit: int) -> List[Dict]:
     root = DATA_DIR
     try:
-        users_df = pd.read_csv(root / "Users.csv", usecols=["Id", "UserName"])
+        users_df = pd.read_csv(root / "Users.csv", usecols=["Id", "UserName", "CreationDate"], parse_dates=["CreationDate"])
         # CompetitionResults.csv may not be available; handle gracefully
         comp_path = root / "CompetitionResults.csv"
         if comp_path.exists():
@@ -196,6 +196,7 @@ def _compute_skill(limit: int) -> List[Dict]:
                 "rating": float(row.rating),
                 "rank": rank,
                 "source": "kaggle",
+                "platform_first_seen": row.CreationDate.date().isoformat() if not pd.isna(row.CreationDate) else None,
             }
         )
 
@@ -216,6 +217,7 @@ def _compute_skill(limit: int) -> List[Dict]:
                     "rating": 0.0,
                     "rank": cur_rank,
                     "source": "kaggle",
+                    "platform_first_seen": None,
                 }
             )
             cur_rank += 1

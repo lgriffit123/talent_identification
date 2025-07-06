@@ -28,7 +28,8 @@ import logging
 import math
 import os
 import threading
-from typing import Dict, List
+from typing import Dict, List, Optional
+from datetime import datetime
 
 import cloudscraper
 import time
@@ -47,6 +48,46 @@ _MAX_WORKERS = 10  # cap concurrent requests to stay within urllib3 default pool
 
 # Single scraper instance (handles Cloudflare automatically)
 scraper = cloudscraper.create_scraper()
+
+# Cache for user join dates to avoid duplicate GraphQL calls
+_JOIN_DATE_CACHE: dict[str, Optional[str]] = {}
+
+
+def _get_join_date(username: str) -> Optional[str]:
+    """Return account creation date (ISO) for *username* using LeetCode GraphQL."""
+
+    if username in _JOIN_DATE_CACHE:
+        return _JOIN_DATE_CACHE[username]
+
+    query = (
+        "query($username:String!){ matchedUser(username:$username){ user { joinDate } } }"
+    )
+
+    try:
+        resp = requests.post(
+            _GRAPHQL_ENDPOINT,
+            json={"query": query, "variables": {"username": username}},
+            headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"},
+            timeout=15,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            join_ts = (
+                data.get("data", {})
+                .get("matchedUser", {})
+                .get("user", {})
+                .get("joinDate")
+            )
+            if join_ts:
+                iso_date = datetime.utcfromtimestamp(int(join_ts)).date().isoformat()
+                _JOIN_DATE_CACHE[username] = iso_date
+                return iso_date
+    except Exception:
+        logger.debug("Failed to fetch joinDate for %s", username)
+
+    _JOIN_DATE_CACHE[username] = None
+    return None
+
 
 # ----------------------------------------------------------------------------
 # Helpers
@@ -79,13 +120,14 @@ def _fetch_page(slug: str, page: int, out: List[Dict], lock: threading.Lock) -> 
             "rank": user["rank"],
             "score": user.get("score"),
             "source": "leetcode",
+            "platform_first_seen": _get_join_date(user["username"]),
         })
 
     with lock:
         out.extend(rows)
 
 
-def _get_latest_slug() -> str | None:
+def _get_latest_slug() -> Optional[str]:
     """Return titleSlug of the most recent past or upcoming contest."""
 
     query = """query { allContests { titleSlug startTime } }"""
@@ -107,7 +149,7 @@ def _get_latest_slug() -> str | None:
         return None
 
 
-def _get_cf_cookie() -> dict[str, str] | None:
+def _get_cf_cookie() -> Optional[dict[str, str]]:
     with sync_playwright() as p:
         browser = p.firefox.launch(headless=True)
         context = browser.new_context(storage_state=None)
@@ -126,7 +168,7 @@ def _get_cf_cookie() -> dict[str, str] | None:
 try:
     from playwright.sync_api import sync_playwright  # type: ignore
 
-    def _solve_cloudflare(slug: str) -> dict[str, str] | None:  # pragma: no cover
+    def _solve_cloudflare(slug: str) -> Optional[dict[str, str]]:  # pragma: no cover
         """Launch a headless Firefox instance, load the ranking page once and
         return the resulting cookies (includes cf_clearance).  Requires
         Playwright with browsers installed (`playwright install firefox`)."""
@@ -168,7 +210,7 @@ except ImportError:  # Playwright not installed
 # Public API
 # ----------------------------------------------------------------------------
 
-def fetch_contest_ranking(slug: str | None = None, limit: int = 1000) -> List[Dict]:
+def fetch_contest_ranking(slug: Optional[str] = None, limit: int = 1000) -> List[Dict]:
     """Return *limit* ranked users for the specified LeetCode contest *slug*.
 
     Parameters
@@ -221,6 +263,7 @@ def fetch_contest_ranking(slug: str | None = None, limit: int = 1000) -> List[Di
             "rank": u["rank"],
             "score": u.get("score"),
             "source": "leetcode",
+            "platform_first_seen": _get_join_date(u["username"]),
         })
         if len(results) >= limit:
             cache.set_cached(cache_key, results)

@@ -10,7 +10,7 @@ import json
 import os
 from datetime import date
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 CATALOG_PATH = Path(__file__).parent / "catalog.json"
@@ -34,7 +34,7 @@ def _save_catalog(catalog: Dict[str, Any]) -> None:
     CATALOG_PATH.write_text(json.dumps(catalog, ensure_ascii=False, indent=2))
 
 
-def get_cached(source: str) -> List[Dict] | None:
+def get_cached(source: str) -> Optional[List[Dict]]:
     """Return cached data for *source* if it was fetched today."""
 
     if SKIP_CACHE:

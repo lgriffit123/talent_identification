@@ -16,11 +16,13 @@ def interestingness_score(profile: Dict) -> Tuple[float, str]:
     - The reason string explains the contributors.
     """
 
-    # Use unified z-score (percentile converted to standard normal) for cross-platform fairness.
-    if "unified_z" in profile:
+    # Primary z: per-source rating z-score (avoids percentile saturation).
+    if "rating_z" in profile:
+        z = profile["rating_z"]
+    elif "unified_z" in profile:
         z = profile["unified_z"]
     else:
-        # Fallback – derive from percentile if caller hasn't provided unified_z yet
+        # Fallback – derive from percentile if caller hasn't provided any z yet
         p = min(max(profile.get("norm", 0.0), 1e-12), 1 - 1e-12)
         z = math.sqrt(2) * erfinv(2 * p - 1)
 
@@ -46,13 +48,29 @@ def interestingness_score(profile: Dict) -> Tuple[float, str]:
         if total > 1:
             rank_bonus = (total - profile["rank"] + 1) / total * 300  # up to +300
 
-    score = (base_score + momentum) * versatility_factor + multi_source_bonus + rank_bonus
+    # --------------------------- NEW BONUSES ---------------------------
+    # Geography bonus – reward top performers within their country bucket
+    geo_norm = profile.get("geo_norm", 0.0)
+    geo_bonus = (geo_norm ** 2) * 100  # squared to emphasise top spots (max +100)
+
+    # Rising-star bonus if yesterday-to-today sigma jump is significant
+    rising_bonus = 50 if profile.get("delta_sigma", 0.0) > 1.5 else 0.0
+
+    # Fresh-entrant bonus (less than 1 year since first seen)
+    fresh_bonus = 25 if profile.get("fresh") else 0.0
+
+    # -------------------------------------------------------------------
+
+    score = (base_score + momentum + geo_bonus + rising_bonus) * versatility_factor + multi_source_bonus + rank_bonus + fresh_bonus
 
     source = profile.get("source", "unknown")
     reason_parts = [
         f"rating {int(profile.get('rating', 0))} on {source}",
         f"z {z:+.2f}",
         f"Δσ {profile.get('delta_sigma',0):+.1f}" if momentum else None,
+        f"geo +{int(geo_bonus)} (top {geo_norm*100:.1f}% in {profile.get('country')})" if geo_bonus else None,
+        "Rising star" if rising_bonus else None,
+        (f"fresh entrant (joined {profile.get('first_seen')} — {profile.get('first_seen_source')})" if fresh_bonus else None),
         f"rank bonus +{int(rank_bonus)}" if rank_bonus else None,
         f"multi-platform ({profile.get('versatility')})" if profile.get('versatility',1)>1 else None,
     ]
