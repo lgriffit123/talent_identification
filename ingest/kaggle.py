@@ -199,6 +199,27 @@ def _compute_skill(limit: int) -> List[Dict]:
             }
         )
 
+    # Pad with zero-score users so we always return `limit` entries
+    if len(users) < limit:
+        remaining = limit - len(users)
+        remaining_users = (
+            users_df[~users_df["UserName"].isin({u["handle"] for u in users})]
+            .head(remaining)
+        )
+        cur_rank = len(users) + 1
+        for _, row in remaining_users.iterrows():
+            users.append(
+                {
+                    "name": row.UserName,
+                    "handle": row.UserName,
+                    "country": None,
+                    "rating": 0.0,
+                    "rank": cur_rank,
+                    "source": "kaggle",
+                }
+            )
+            cur_rank += 1
+
     return users
 
 
@@ -215,7 +236,7 @@ def fetch_leaderboard(limit: int = 1000) -> List[Dict]:
 
     cached = cache.get_cached("kaggle")
     if cached is not None:
-        logger.debug("Using cached Kaggle data (%d entries)", len(cached))
+        logger.info("Using cached Kaggle data (%d entries)", len(cached))
         return cached[:limit]
 
     if not _prepare_kaggle_credentials():

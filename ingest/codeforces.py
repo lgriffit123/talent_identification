@@ -33,7 +33,7 @@ def fetch_ratings(limit: int = 1000) -> List[Dict]:
     # Check cache first
     cached = cache.get_cached("codeforces")
     if cached is not None:
-        logger.debug("Using cached Codeforces data (%d entries)", len(cached))
+        logger.info("Using cached Codeforces data (%d entries)", len(cached))
         return cached[:limit]
 
     endpoint = f"{CODEFORCES_API_URL}/user.ratedList?activeOnly=true&includeRetired=false"
