@@ -67,7 +67,8 @@ def fetch_ratings(limit: int = 1000) -> List[Dict]:
         users = data.get("result", [])[:limit]
 
         normalised: List[Dict] = []
-        for u in users:
+
+        for u in tqdm(users, desc="Codeforces reg-date", unit="user"):
             name_parts = []
             if u.get("firstName"):
                 name_parts.append(u["firstName"].strip())
