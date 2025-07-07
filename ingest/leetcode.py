@@ -36,9 +36,24 @@ import time
 from playwright.sync_api import sync_playwright
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import tqdm
 
 from . import cache
+
+# Optional progress bar
+try:
+    from tqdm import tqdm  # type: ignore
+except ImportError:  # pragma: no cover – tqdm not installed
+    def tqdm(iterable=None, **kwargs):  # type: ignore
+        if iterable is None:
+            class _DummyPB:
+                def __enter__(self):
+                    return self
+                def __exit__(self, *exc):
+                    return False
+                def update(self, n=1):
+                    pass
+            return _DummyPB()
+        return iterable
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +96,19 @@ def _get_join_date(username: str) -> Optional[str]:
             )
             if join_ts:
                 iso_date = datetime.utcfromtimestamp(int(join_ts)).date().isoformat()
+                _JOIN_DATE_CACHE[username] = iso_date
+                return iso_date
+    except Exception:
+        logger.debug("Failed GraphQL joinDate for %s", username)
+
+    # --- Fallback: undocumented REST endpoint `/api/users/<username>/` ---
+    try:
+        rest_url = f"https://leetcode.com/api/users/{username}/"
+        r = scraper.get(rest_url, timeout=10)  # reuse cloudscraper to bypass CF
+        if r.status_code == 200:
+            jd = r.json().get("joinDate")
+            if jd:
+                iso_date = datetime.utcfromtimestamp(int(jd)).date().isoformat()
                 _JOIN_DATE_CACHE[username] = iso_date
                 return iso_date
     except Exception:

@@ -31,6 +31,9 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# Optional env var TI_ONLY="leetcode" or "codeforces,leetcode" to limit sources fetched
+TI_ONLY = {s.strip().lower() for s in os.getenv("TI_ONLY", "codeforces,leetcode,kaggle").split(",") if s.strip()}
+
 # Persistent record of when a handle was first observed
 FIRST_SEEN_FILE = Path("meta") / "first_seen.json"
 
@@ -38,9 +41,9 @@ def orchestrate() -> None:
     """Run the full talent identification pipeline."""
     logger.info("Starting ingestion phase")
 
-    cf_raw = codeforces.fetch_ratings()
-    lc_raw = leetcode.fetch_contest_ranking(None)
-    kg_raw = kaggle.fetch_leaderboard()
+    cf_raw = codeforces.fetch_ratings() if "codeforces" in TI_ONLY else []
+    lc_raw = leetcode.fetch_contest_ranking(None) if "leetcode" in TI_ONLY else []
+    kg_raw = kaggle.fetch_leaderboard() if "kaggle" in TI_ONLY else []
 
     logger.info(
         "Fetched counts — Codeforces: %d, LeetCode: %d, Kaggle: %d",
