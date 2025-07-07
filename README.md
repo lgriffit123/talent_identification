@@ -1,6 +1,6 @@
 # Talent Identification Pipeline
 
-Identify top technical talent across competitive programming and data-science platforms for VC scouting.
+Identify top technical talent across competitive programming and data-science platforms.
 
 ---
 
