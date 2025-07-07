@@ -30,6 +30,7 @@ import os
 import threading
 from typing import Dict, List, Optional
 from datetime import datetime
+import re
 
 import cloudscraper
 import time
@@ -65,6 +66,25 @@ _MAX_WORKERS = 10  # cap concurrent requests to stay within urllib3 default pool
 # Single scraper instance (handles Cloudflare automatically)
 scraper = cloudscraper.create_scraper()
 
+# ---------------------------------------------------------------------------
+# Optional authentication cookies (improves success rate, enables joinDate)
+# ---------------------------------------------------------------------------
+
+def _load_auth_cookies() -> dict[str, str]:
+    ck: dict[str, str] = {}
+    if os.getenv("LEETCODE_SESSION"):
+        ck["LEETCODE_SESSION"] = os.getenv("LEETCODE_SESSION", "")
+    if os.getenv("LEETCODE_CSRF"):
+        ck["csrftoken"] = os.getenv("LEETCODE_CSRF", "")
+    return ck
+
+
+_AUTH_COOKIES = _load_auth_cookies()
+
+# Attach cookies to the scraper session so *all* subsequent requests inherit them
+if _AUTH_COOKIES:
+    scraper.cookies.update(_AUTH_COOKIES)
+
 # Cache for user join dates to avoid duplicate GraphQL calls
 _JOIN_DATE_CACHE: dict[str, Optional[str]] = {}
 
@@ -84,6 +104,7 @@ def _get_join_date(username: str) -> Optional[str]:
             _GRAPHQL_ENDPOINT,
             json={"query": query, "variables": {"username": username}},
             headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"},
+            cookies=_AUTH_COOKIES,
             timeout=15,
         )
         if resp.status_code == 200:
@@ -104,7 +125,7 @@ def _get_join_date(username: str) -> Optional[str]:
     # --- Fallback: undocumented REST endpoint `/api/users/<username>/` ---
     try:
         rest_url = f"https://leetcode.com/api/users/{username}/"
-        r = scraper.get(rest_url, timeout=10)  # reuse cloudscraper to bypass CF
+        r = scraper.get(rest_url, cookies=_AUTH_COOKIES, timeout=10)  # reuse cloudscraper to bypass CF
         if r.status_code == 200:
             jd = r.json().get("joinDate")
             if jd:
@@ -114,7 +135,32 @@ def _get_join_date(username: str) -> Optional[str]:
     except Exception:
         logger.debug("Failed to fetch joinDate for %s", username)
 
-    _JOIN_DATE_CACHE[username] = None
+    # Final fallback – anonymous HTML scrape
+    html_date = _get_join_date_html(username)
+    _JOIN_DATE_CACHE[username] = html_date
+    return html_date
+
+
+# ---------------------------------------------------------------------------
+# HTML profile fallback (anonymous)
+# ---------------------------------------------------------------------------
+
+def _get_join_date_html(username: str) -> Optional[str]:
+    try:
+        url = f"https://leetcode.com/{username}/"
+        resp = scraper.get(url, timeout=10, cookies=_AUTH_COOKIES)
+        logger.debug("HTML profile request %s status %s", url, resp.status_code)
+        if resp.status_code == 200:
+            m = re.search(r'"joinDate"\s*:\s*(\d+)', resp.text)
+            if m:
+                ts = int(m.group(1))
+                iso_date = datetime.utcfromtimestamp(ts).date().isoformat()
+                logger.debug("Parsed joinDate for %s: %s", username, iso_date)
+                return iso_date
+            else:
+                logger.debug("joinDate not found in profile HTML for %s", username)
+    except Exception as exc:
+        logger.debug("HTML joinDate fetch failed for %s: %s", username, exc)
     return None
 
 
@@ -145,11 +191,11 @@ def _fetch_page(slug: str, page: int, out: List[Dict], lock: threading.Lock) -> 
             "name": user["username"],
             "handle": user["username"],
             "country": user.get("country_code"),
-            "rating": user.get("rating", user.get("score", 0)),
+            "rating": user.get("rank") if user.get("rank") is not None else user.get("score", 0),
             "rank": user["rank"],
             "score": user.get("score"),
             "source": "leetcode",
-            "platform_first_seen": _get_join_date(user["username"]),
+            # "platform_first_seen": _get_join_date(user["username"]),
         })
 
     with lock:
@@ -165,6 +211,7 @@ def _get_latest_slug() -> Optional[str]:
             _GRAPHQL_ENDPOINT,
             json={"query": query},
             headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"},
+            cookies=_AUTH_COOKIES,
             timeout=20,
         )
         if resp.status_code != 200:
@@ -288,11 +335,11 @@ def fetch_contest_ranking(slug: Optional[str] = None, limit: int = 300) -> List[
             "name": u["username"],
             "handle": u["username"],
             "country": u.get("country_code"),
-            "rating": u.get("rating", u.get("score", 0)),
+            "rating": u.get("rating") if u.get("rating") is not None else u.get("score", 0),
             "rank": u["rank"],
             "score": u.get("score"),
             "source": "leetcode",
-            "platform_first_seen": _get_join_date(u["username"]),
+            # "platform_first_seen": _get_join_date(u["username"]),
         })
         if len(results) >= limit:
             cache.set_cached(cache_key, results)

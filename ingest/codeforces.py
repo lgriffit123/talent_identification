@@ -76,7 +76,8 @@ def fetch_ratings(limit: int = 300) -> List[Dict]:
                 name_parts.append(u["lastName"].strip())
             name = " ".join(name_parts) if name_parts else u["handle"]
 
-            first_seen = _get_reg_date(u["handle"])  # may be None
+            # first_seen = _get_reg_date(u["handle"])  # commented out – join-date disabled
+            first_seen = None
 
             normalised.append(
                 {
@@ -86,7 +87,7 @@ def fetch_ratings(limit: int = 300) -> List[Dict]:
                     "rating": u.get("rating", 0),
                     "rank": u.get("rank"),
                     "source": "codeforces",
-                    "platform_first_seen": first_seen,
+                    # "platform_first_seen": first_seen,
                 }
             )
 

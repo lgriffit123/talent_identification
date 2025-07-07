@@ -172,8 +172,8 @@ def orchestrate() -> None:
     for ent in entities:
         src = ent["source"]
         stats = source_stats.get(src)
-        if stats and ent.get("rating"):
-            ent["rating_z"] = (ent["rating"] - stats["mean"]) / stats["std"]
+        if stats is not None:
+            ent["rating_z"] = (ent.get("rating", 0.0) - stats["mean"]) / stats["std"]
         else:
             ent["rating_z"] = 0.0
 

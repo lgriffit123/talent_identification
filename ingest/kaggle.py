@@ -206,7 +206,7 @@ def _compute_skill(limit: int) -> List[Dict]:
                 "rating": float(row.rating),
                 "rank": rank,
                 "source": "kaggle",
-                "platform_first_seen": row.CreationDate.date().isoformat() if not pd.isna(row.CreationDate) else None,
+                # "platform_first_seen": row.CreationDate.date().isoformat() if not pd.isna(row.CreationDate) else None,
             }
         )
 
@@ -227,7 +227,7 @@ def _compute_skill(limit: int) -> List[Dict]:
                     "rating": 0.0,
                     "rank": cur_rank,
                     "source": "kaggle",
-                    "platform_first_seen": None,
+                    # "platform_first_seen": None,
                 }
             )
             cur_rank += 1

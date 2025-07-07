@@ -56,12 +56,12 @@ def interestingness_score(profile: Dict) -> Tuple[float, str]:
     # Rising-star bonus if yesterday-to-today sigma jump is significant
     rising_bonus = 50 if profile.get("delta_sigma", 0.0) > 1.5 else 0.0
 
-    # Fresh-entrant bonus (less than 1 year since first seen)
-    fresh_bonus = 25 if profile.get("fresh") else 0.0
-
     # -------------------------------------------------------------------
 
-    score = (base_score + momentum + geo_bonus + rising_bonus) * versatility_factor + multi_source_bonus + rank_bonus + fresh_bonus
+    # Fresh-entrant bonus (less than 1 year since first seen)
+    # fresh_bonus = 25 if profile.get("fresh") else 0.0  # ← commented out for now
+
+    score = (base_score + momentum + geo_bonus + rising_bonus) * versatility_factor + multi_source_bonus + rank_bonus  # + fresh_bonus
 
     source = profile.get("source", "unknown")
     reason_parts = [
@@ -70,9 +70,9 @@ def interestingness_score(profile: Dict) -> Tuple[float, str]:
         f"Δσ {profile.get('delta_sigma',0):+.1f}" if momentum else None,
         f"geo +{int(geo_bonus)} (top {geo_norm*100:.1f}% in {profile.get('country')})" if geo_bonus else None,
         "Rising star" if rising_bonus else None,
-        (f"fresh entrant (joined {profile.get('first_seen')} — {profile.get('first_seen_source')})" if fresh_bonus else None),
         f"rank bonus +{int(rank_bonus)}" if rank_bonus else None,
         f"multi-platform ({profile.get('versatility')})" if profile.get('versatility',1)>1 else None,
+        # (f"fresh entrant (joined {profile.get('first_seen')} — {profile.get('first_seen_source')})" if fresh_bonus else None),
     ]
 
     reason = "\n  • " + "\n  • ".join(p for p in reason_parts if p)

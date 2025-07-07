@@ -8,4 +8,7 @@ test:
 run:
 	python3 main.py
 
+run-debug:
+	TI_LOGLEVEL=DEBUG python3 main.py
+
 setup: install 
