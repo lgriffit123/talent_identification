@@ -1,0 +1,8 @@
+# Data artifacts
+meta/
+ingest/catalog.json
+*.csv
+*.zip 
+*.md
+*.json
+*.env
