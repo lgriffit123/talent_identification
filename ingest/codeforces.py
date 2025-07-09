@@ -88,6 +88,7 @@ def fetch_ratings(limit: int = 300) -> List[Dict]:
                     "rank": u.get("rank"),
                     "source": "codeforces",
                     # "platform_first_seen": first_seen,
+                    "platform_first_seen": None
                 }
             )
 

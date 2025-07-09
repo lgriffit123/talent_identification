@@ -1,8 +1,34 @@
-"""Scoring module: computes an 'interestingness' metric for each entity."""
+"""Scoring module: computes an 'interestingness' metric for each entity.
+
+Future ranking ideas
+====================
+Today we simply sort on the scalar ``score`` returned by
+``interestingness_score``.  Below are directions for making the ranking
+layer more sophisticated (kept here so reviewers see the roadmap in one
+place):
+
+1. **Peer-group normalisation** Rank each user against a cohort of
+   similar peers (same platform, region, tenure) and blend that
+   percentile into the global score so under-represented regions get
+   exposure.
+
+2. **Long-term momentum** Replace the one-day Δσ with an exponentially
+   weighted moving average to emphasise sustained
+   improvement.
+
+3. **Volatility-adjusted returns** Apply a Sharpe-ratio-like metric to
+   reward consistent growth over erratic swings.
+
+5. **Ensemble ranking** Combine multiple rank lists (absolute score,
+   momentum, peer rank).
+
+6. **Explainability** Store per-metric contributions so the report can
+   state *"Alice is #1 because she's top 0.1 % globally **and** has the
+   fastest month-over-month growth in India."*
+"""
 
 from typing import Dict, Tuple
 import math
-from etl.utils import erfinv
 
 # No per-source default multipliers now
 
@@ -19,16 +45,12 @@ def interestingness_score(profile: Dict) -> Tuple[float, str]:
     # Primary z: per-source rating z-score (avoids percentile saturation).
     if "rating_z" in profile:
         z = profile["rating_z"]
-    elif "unified_z" in profile:
-        z = profile["unified_z"]
+        base_score = (1 / (1 + math.exp(-z))) * 1000
     else:
-        # Fallback – derive from percentile if caller hasn't provided any z yet
-        p = min(max(profile.get("norm", 0.0), 1e-12), 1 - 1e-12)
-        z = math.sqrt(2) * erfinv(2 * p - 1)
-
-    # Map z to a 0-1 score via sigmoid and stretch to 0-1000
-    sigmoid = 1 / (1 + math.exp(-z))  # 0–1
-    base_score = sigmoid * 1000
+        # Simpler: use global percentile directly (0–1 → 0–1000)
+        p = min(max(profile.get("norm", 0.0), 0.0), 1.0)
+        z = None
+        base_score = p * 1000
 
     z_bonus = 0  # no separate bonus – z already captured
 
@@ -66,11 +88,12 @@ def interestingness_score(profile: Dict) -> Tuple[float, str]:
     source = profile.get("source", "unknown")
     reason_parts = [
         f"rating {int(profile.get('rating', 0))} on {source}",
-        f"z {z:+.2f}",
+        f"pct {profile.get('norm',0)*100:.1f}%" if z is None else f"z {z:+.2f}",
         f"Δσ {profile.get('delta_sigma',0):+.1f}" if momentum else None,
         f"geo +{int(geo_bonus)} (top {geo_norm*100:.1f}% in {profile.get('country')})" if geo_bonus else None,
         "Rising star" if rising_bonus else None,
         f"rank bonus +{int(rank_bonus)}" if rank_bonus else None,
+        f"first seen {profile.get('first_seen')} (local snapshot)" if profile.get('first_seen') else None,
         f"multi-platform ({profile.get('versatility')})" if profile.get('versatility',1)>1 else None,
         # (f"fresh entrant (joined {profile.get('first_seen')} — {profile.get('first_seen_source')})" if fresh_bonus else None),
     ]

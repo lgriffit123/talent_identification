@@ -196,6 +196,7 @@ def _fetch_page(slug: str, page: int, out: List[Dict], lock: threading.Lock) -> 
             "score": user.get("score"),
             "source": "leetcode",
             # "platform_first_seen": _get_join_date(user["username"]),
+            "platform_first_seen": None,  # per-platform join dates disabled; using local first-seen tracking instead
         })
 
     with lock:
@@ -340,6 +341,7 @@ def fetch_contest_ranking(slug: Optional[str] = None, limit: int = 300) -> List[
             "score": u.get("score"),
             "source": "leetcode",
             # "platform_first_seen": _get_join_date(u["username"]),
+            "platform_first_seen": None,  # per-platform join dates disabled; using local first-seen tracking instead
         })
         if len(results) >= limit:
             cache.set_cached(cache_key, results)

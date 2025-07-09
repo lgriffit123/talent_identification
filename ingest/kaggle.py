@@ -10,6 +10,16 @@ using the Kaggle API and computes a simple composite score based on:
 
 The function returns a list of user dictionaries compatible with the rest of
 pipeline.
+
+Note on joined dates
+--------------------
+The Meta-Kaggle dataset includes a `CreationDate`, but it is optional and
+its semantics changed across versions.  Attempting to reconcile that per-user
+value with the rest of the pipeline created more edge-cases than insights, so
+the join-date extraction has been disabled.  The pipeline instead relies on
+its own first-seen tracking (see main.py) to populate `platform_first_seen`.
+Persisting this value in a cloud datastore would let us analyse weekly /
+monthly onboarding trends.
 """
 
 from __future__ import annotations
@@ -207,6 +217,7 @@ def _compute_skill(limit: int) -> List[Dict]:
                 "rank": rank,
                 "source": "kaggle",
                 # "platform_first_seen": row.CreationDate.date().isoformat() if not pd.isna(row.CreationDate) else None,
+                "platform_first_seen": None,
             }
         )
 
@@ -227,7 +238,7 @@ def _compute_skill(limit: int) -> List[Dict]:
                     "rating": 0.0,
                     "rank": cur_rank,
                     "source": "kaggle",
-                    # "platform_first_seen": None,
+                   "platform_first_seen": None,  # per-platform join date disabled; using local first-seen tracking instead
                 }
             )
             cur_rank += 1

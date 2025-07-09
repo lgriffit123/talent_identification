@@ -12,7 +12,6 @@ from collections import defaultdict, Counter
 
 from ingest import codeforces, kaggle, leetcode, cache
 from etl import entity_resolution, scoring, report
-from etl.utils import erfinv
 from dotenv import load_dotenv
 
 # Load environment variables from .env if present (safe-no-op if file missing)
@@ -54,6 +53,16 @@ def orchestrate() -> None:
     # -------------------------------------------------------------------
     # Track first-seen date per handle to distinguish fresh vs veteran
     # -------------------------------------------------------------------
+    # NOTE:
+    # Per-platform account-creation dates turned out to be unreliable to fetch
+    # (different APIs, rate limits, missing data).  The ETL jobs therefore no
+    # longer attempt to pull a definitive "joined" date from Codeforces,
+    # LeetCode or Kaggle.  Instead we record when a handle first shows up in
+    # *our* ingestion pipeline and surface that as `platform_first_seen`.
+    # This timestamp is serialised to `meta/first_seen.json` so that future
+    # runs can detect newcomers.  In production we should store the same data
+    # in a cloud datastore (e.g. BigQuery or DynamoDB) to enable weekly /
+    # monthly cohort analysis of developer sign-ups across all sources.
     today_iso = date.today().isoformat()
     try:
         first_seen_map: dict[str, str] = json.loads(FIRST_SEEN_FILE.read_text()) if FIRST_SEEN_FILE.exists() else {}
@@ -62,18 +71,20 @@ def orchestrate() -> None:
 
     for ent in combined_raw:
         # Prefer platform-provided creation date
-        platform_date = ent.get("platform_first_seen")
-        if platform_date:
-            first_date = platform_date
-            first_src_tag = ent.get("source")  # e.g. leetcode, codeforces
-        else:
-            handle_key = ent.get("handle") or ent.get("name")
-            first_date = first_seen_map.get(handle_key, today_iso)
-            first_src_tag = "local"
-            first_seen_map.setdefault(handle_key, first_date)
+        # platform_date = ent.get("platform_first_seen")
+        # if platform_date:
+        #     first_date = platform_date
+        #     first_src_tag = ent.get("source")  # e.g. leetcode, codeforces
+        # else:
+        handle_key = ent.get("handle") or ent.get("name")
+        first_date = first_seen_map.get(handle_key, today_iso)
+        first_src_tag = "local"
+        first_seen_map.setdefault(handle_key, first_date)
 
         ent["first_seen"] = first_date
         ent["first_seen_source"] = first_src_tag
+        # Always expose a platform_first_seen value for downstream consumers
+        # ent.setdefault("platform_first_seen", first_date)
         ent["days_active"] = (date.fromisoformat(today_iso) - date.fromisoformat(first_date)).days
         ent["fresh"] = ent["days_active"] < 365
 
@@ -133,21 +144,15 @@ def orchestrate() -> None:
         ent["src_weight"] = 1.0  # uniform weight now
         ent["total_in_src"] = total_in_src.get(src, 0)
 
-        # Standardise across platforms: convert percentile → standard-normal z
-        p = ent["norm"]
-        # Clamp to avoid infinities at 0 or 1
-        p = min(max(p, 1e-12), 1 - 1e-12)
-        ent["unified_z"] = math.sqrt(2) * erfinv(2 * p - 1)
-
     # Load yesterday ratings for momentum
     prev_ratings: dict[str, dict[str, float]] = defaultdict(dict)
     try:
         catalog = cache._load_catalog()
         yesterday = (date.today() - timedelta(days=1)).isoformat()
-        for src, entry in catalog.items():
-            if entry.get("fetched_at") == yesterday:
-                for u in entry.get("data", []):
-                    prev_ratings[src][u.get("handle")] = u.get("rating", 0)
+        day_snapshot = catalog.get(yesterday, {})
+        for src, data in day_snapshot.items():
+            for u in data:
+                prev_ratings[src][u.get("handle")] = u.get("rating", 0)
     except Exception:
         pass
 
