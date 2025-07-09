@@ -18,7 +18,6 @@ from dotenv import load_dotenv
 # Load environment variables from .env if present (safe-no-op if file missing)
 load_dotenv()
 
-# want to highlight not just the top scores, but maybe top score in a certain area, or highest relative position to peers. 
 # ---------------------------------------------------------------------------
 # Logging setup (controlled by TI_LOGLEVEL, default INFO)
 # ---------------------------------------------------------------------------

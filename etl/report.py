@@ -16,6 +16,18 @@ def write_markdown_report(entities: List[Dict], output_path: Union[str, Path] = 
     """
     lines: List[str] = ["# Talent Identification Report", "\n"]
 
+    # Disclaimer about country completeness
+    total = len(entities)
+    missing_country = sum(1 for e in entities if not e.get("country"))
+    leet_missing = sum(1 for e in entities if e.get("source") == "leetcode" and not e.get("country"))
+    kag_missing = sum(1 for e in entities if e.get("source") == "kaggle" and not e.get("country"))
+
+    lines.append(
+        f"> Note: country metadata is sparse — overall {missing_country}/{total} profiles lack a country code. "
+        f"Kaggle missing: {kag_missing}, LeetCode missing: {leet_missing}."
+    )
+    lines.append("\n")
+
     for rank, entity in enumerate(entities, start=1):
         name = entity.get("name", "Unknown")
         score = entity.get("score", "N/A")

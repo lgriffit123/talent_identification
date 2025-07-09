@@ -1,4 +1,24 @@
-"""Entity resolution module: fuzzy merge and enrichment."""
+"""Entity resolution module: fuzzy merge and enrichment.
+
+Current data quirks
+-------------------
+• **Kaggle** – we only get the *handle* (username); display names are not included in the public Meta-Kaggle CSVs.
+• **LeetCode** – profile API returns only the *display name*; the handle is embedded in the URL but often matches the name exactly.
+• **Codeforces** – provides both *handle* and separate first / last name fields (when the user filled them in).
+
+This means that when merging we usually rely on:
+1. **Exact handle match** (best for Kaggle ↔ Codeforces).
+2. **Fuzzy name match** using RapidFuzz (best for LeetCode ↔ Codeforces).
+
+Future improvement ideas
+------------------------
+To improve recall we could enrich the dataset with LinkedIn look-ups for the Top-N candidates:
+1. Search LinkedIn by `"<name>" AND "Codeforces"` etc.
+2. If a LinkedIn profile is found, grab the canonical name & location.
+3. Feed that back into the resolver as an authoritative identifier.
+
+LinkedIn scraping is intentionally *not* included in this repository because it violates LinkedIn terms of service and would require headless browser automation.
+"""
 
 from typing import List, Dict
 
