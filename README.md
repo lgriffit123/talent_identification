@@ -29,7 +29,7 @@ $ git clone …/talent_identification.git && cd talent_identification
 $ make install        # installs `pip` deps from requirements.txt
 ```
 
-Python ≥ 3.9 is required. (3.11+ recommended for faster asyncio internals; the code stays 3.9-compatible.)
+Python ≥ 3.9 is required (3.11+ recommended).
 
 ---
 
@@ -44,7 +44,7 @@ After ~30 s you'll have `report.md` in the repo root.
 ### Force a fresh download
 
 ```bash
-$ TI_SKIP_CACHE=1 make run     # bypasses ingest/cache.json for this invocation
+$ TI_SKIP_CACHE=1 make run     # bypasses ingest/catalog.json for this run
 ```
 
 ### Verbose logging
@@ -74,20 +74,22 @@ You can also place them in a `.env` file at repo root – it's auto-loaded by `m
 
 | Source | File | What we fetch |
 |--------|------|---------------|
-| **Codeforces** | `ingest/codeforces.py` | Top N rated users via `user.ratedList`, plus per-user `registrationTimeSeconds`. |
-| **LeetCode** | `ingest/leetcode.py` | Contest leaderboard for a given slug (`weekly-contest-457` by default). GraphQL call enriches each handle with `joinDate`. |
+| **Codeforces** | `ingest/codeforces.py` | Top-N rated users via `user.ratedList`. |
+| **LeetCode** | `ingest/leetcode.py` | Contest leaderboard for a given slug (`weekly-contest-457` by default). |
 | **Kaggle** | `ingest/kaggle.py` | Meta-Kaggle CSVs (Users, Kernels, Datasets …) converted into a numeric "skill" score. |
 
-Each ingestor returns a list with unified keys: `name, handle, country, rating, rank, source, platform_first_seen`.
+Each ingestor returns a list with unified keys:
+`name, handle, country, rating, rank, source, platform_first_seen`.
 
-Data is cached once per day under `ingest/catalog.json`.
+> `platform_first_seen` now comes from **our own** first observation of the handle.
+> Per-platform "join" dates were removed because they were slow/brittle to fetch.
 
 ### 5.2 Entity Resolution
 
 `etl/entity_resolution.py`
 
 * RapidFuzz token-sort ratio ≥ 88 → same person.
-* Aggregates `handles` dict so one profile can hold multiple platform IDs.
+* Aggregates a `handles` dict so one profile can hold multiple platform IDs.
 
 ### 5.3 Scoring Logic
 
@@ -98,49 +100,35 @@ TalentScore = (base + momentum + geo + rising) * versatility_factor
               + multi_platform_bonus + rank_bonus + fresh_bonus
 ```
 
-• **base** – sigmoid-scaled `rating_z` (z-score inside platform). 0-1000 range.
-• **momentum** – `delta_sigma × 50` (σ-change vs. yesterday).
-• **geo** – up to +100 for #1 in country.
-• **rising** – +50 if momentum > +1.5 σ.
-• **versatility_factor** – +10 % per extra platform (capped +25 %).
-• **multi_platform_bonus** – flat +50 if a user appears on >1 platform.
-• **rank_bonus** – up to +300 for podium AtCoder ranks (placeholder example).
-• **fresh_bonus** – +25 when `days_active < 365`.
-
-Reason strings in the report list all contributing factors, e.g.
-
-```
-• rating 2920 on codeforces
-• z +3.62
-• Δσ +1.4
-• geo +88 (top 2.0 % in IN)
-• Rising star
-• fresh entrant (joined 2024-06-07 — leetcode)
-```
+See the source for details on each component.
 
 ### 5.4 Reporting
 
-`etl/report.py` writes `report.md` with:
-
-1. Global Top-25 table (name, primary handle, score, reasons).
-2. Country sections for the five countries with the most users in the raw data.
+`etl/report.py` writes `report.md` with the global and per-country leaderboards plus explanation bullets.
 
 ---
 
 ## 6. Caching Behaviour & Quirks
 
-* **Daily Cache** – All raw payloads are timestamped; multiple runs on the same day reuse data.
+* **Daily Cache** – `ingest/catalog.json` keeps a *per-day* snapshot:
+
+  ```json
+  {
+    "2024-07-09": { "codeforces": [...], "leetcode": [...], "kaggle": [...] },
+    "2024-07-08": { "codeforces": [...], "leetcode": [...], "kaggle": [...] }
+  }
+  ```
+  Runs on the same day reuse today's entry; new days append a fresh bucket so historical rankings remain available for analysis.
 * **Skip Cache** – set `TI_SKIP_CACHE=1` to force fresh pulls.
 * **LeetCode Cloudflare** – If Cloudflare challenges appear, install Playwright & run `playwright install firefox`; the code will solve the challenge automatically.
-* **Codeforces Rate-Limit** – Registration date is a per-user API call; the function is memoised and will degrade gracefully if rate-limited.
-* **urllib3 LibreSSL Warning** – macOS Python < 3.11 ships LibreSSL; it's a *warning* only.
+* **Codeforces Rate-Limit** – The registration-date endpoint is *not* called anymore; fewer API calls, fewer 429s.
 
 ---
 
 ## 7. Extending / Customising
 
-* Add new ingest source → drop a file into `ingest/` returning the unified dict format.
-* Adjust weightings → tweak constants in `etl/scoring.py`.
-* Add new bonuses → compute the metric in `main.py`, feed it into the profiles, then reference it inside `interestingness_score()`.
+* **Add a new ingest source** → drop a file into `ingest/` returning the unified dict format.
+* **Adjust weightings** → tweak constants in `etl/scoring.py`.
+* **Add new bonuses** → compute the metric in `main.py`, feed it into the profiles, then reference it in `interestingness_score()`.
 
 PRs welcome – especially for additional data sources or alternative scoring heuristics!
